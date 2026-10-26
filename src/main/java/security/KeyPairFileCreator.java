@@ -36,24 +36,12 @@ public class KeyPairFileCreator {
         RSAPrivateKeySpec priv = fact.getKeySpec(kp.getPrivate(),
                 RSAPrivateKeySpec.class);
 
-        saveToFile("/tmp/public.key", pub.getModulus(),
+        // Written to a private key directory (see KeyFiles), owner read/write only.
+        KeyFiles.write(KeyFiles.keyFile(KeyFiles.PUBLIC_KEY_FILE), pub.getModulus(),
                 pub.getPublicExponent());
-        saveToFile("/tmp/private.key", priv.getModulus(),
+        KeyFiles.write(KeyFiles.keyFile(KeyFiles.PRIVATE_KEY_FILE), priv.getModulus(),
                 priv.getPrivateExponent());
 
     }
 
-    private void saveToFile(String fileName,
-                                  BigInteger mod, BigInteger exp) throws IOException {
-        ObjectOutputStream oout = new ObjectOutputStream(
-                new BufferedOutputStream(new FileOutputStream(fileName)));
-        try {
-            oout.writeObject(mod);
-            oout.writeObject(exp);
-        } catch (Exception e) {
-            throw new IOException("Unexpected error", e);
-        } finally {
-            oout.close();
-        }
-    }
 }

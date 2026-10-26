@@ -17,6 +17,13 @@ public class Heartbeat {
     int interval ;
     int numMisses;
 
+    // A connected peer that sends nothing for this long is dropped.
+    static final int READ_TIMEOUT_MS = 60000;
+    // Upper bound on concurrently served peers, so connection floods can't exhaust threads.
+    static final int MAX_CONNECTIONS = 64;
+    private final java.util.concurrent.Semaphore connectionSlots =
+            new java.util.concurrent.Semaphore(MAX_CONNECTIONS);
+
 
 
     public Heartbeat(int port, String targetHost, int interval , int numMisses)
@@ -132,25 +139,35 @@ public class Heartbeat {
                     try {
                         while(true) {
                              Socket socket = listener.accept();
+                            if (!connectionSlots.tryAcquire()) {
+                                socket.close();
+                                continue;
+                            }
                             System.out.println("Listening as server");
                            // Handler handler = (Handler) Class.forName(handlerType).newInstance();
                             //handler.setSocket(socket);
                          Thread t1 = new Thread(()->{
 
-                             while(true) {
-                                 try {
-                                     BufferedReader input =
-                                             new BufferedReader(new InputStreamReader(socket.getInputStream()));
-                                     PrintWriter out =
-                                             new PrintWriter(socket.getOutputStream(), true);
-
-                                     System.out.println(input.readLine());
+                             // One reader/writer per connection; stop (and free the thread) when the
+                             // peer disconnects, errors or goes silent, instead of spinning forever.
+                             try (Socket conn = socket;
+                                  BufferedReader input =
+                                          new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                                  PrintWriter out =
+                                          new PrintWriter(conn.getOutputStream(), true)) {
+                                 conn.setSoTimeout(READ_TIMEOUT_MS);
+                                 while (true) {
+                                     String line = input.readLine();
+                                     if (line == null)
+                                         break;
+                                     System.out.println(line);
                                      out.println("Hello from server" + Thread.currentThread().getName());
                                      out.flush();
-
-                                 } catch (IOException e) {
-                                     e.printStackTrace();
                                  }
+                             } catch (IOException e) {
+                                 e.printStackTrace();
+                             } finally {
+                                 connectionSlots.release();
                              }
 
 
