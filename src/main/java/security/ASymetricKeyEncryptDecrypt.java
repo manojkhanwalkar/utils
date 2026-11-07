@@ -13,8 +13,6 @@ import java.security.spec.RSAPublicKeySpec;
 import java.util.Calendar;
 
 
-import sun.misc.BASE64Decoder;
-import sun.misc.BASE64Encoder;
 
 import javax.crypto.*;
 import java.io.FileInputStream;
@@ -24,6 +22,9 @@ import java.io.ObjectInputStream;
 
 
 public class ASymetricKeyEncryptDecrypt {
+
+    // OAEP padding; PKCS#1 v1.5 ("RSA" default) is open to padding-oracle attacks.
+    static final String RSA_TRANSFORMATION = "RSA/ECB/OAEPWithSHA-256AndMGF1Padding";
 
 
 
@@ -47,16 +48,16 @@ public class ASymetricKeyEncryptDecrypt {
     }
 
     public static byte[] rsaEncrypt(byte[] data) throws Exception {
-        PublicKey pubKey = readKeyFromFile("/tmp/public.key");
-        Cipher cipher = Cipher.getInstance("RSA");
+        PublicKey pubKey = readKeyFromFile(KeyFiles.keyFile(KeyFiles.PUBLIC_KEY_FILE).toString());
+        Cipher cipher = Cipher.getInstance(RSA_TRANSFORMATION);
         cipher.init(Cipher.ENCRYPT_MODE, pubKey);
         byte[] cipherData = cipher.doFinal(data);
         return cipherData;
     }
 
     public static byte[] rsaDeEncrypt(byte[] data) throws Exception {
-        PrivateKey pubKey = readPrivateKeyFromFile("/tmp/private.key");
-        Cipher cipher = Cipher.getInstance("RSA");
+        PrivateKey pubKey = readPrivateKeyFromFile(KeyFiles.keyFile(KeyFiles.PRIVATE_KEY_FILE).toString());
+        Cipher cipher = Cipher.getInstance(RSA_TRANSFORMATION);
         cipher.init(Cipher.DECRYPT_MODE, pubKey);
         byte[] cipherData = cipher.doFinal(data);
         return cipherData;
@@ -66,41 +67,23 @@ public class ASymetricKeyEncryptDecrypt {
 
 
     private static PublicKey readKeyFromFile(String keyFileName) throws IOException {
-
-        ObjectInputStream oin =
-                new ObjectInputStream(new FileInputStream(keyFileName));
+        // Only BigInteger values are accepted; see KeyFiles.
+        BigInteger[] v = KeyFiles.read(java.nio.file.Paths.get(keyFileName), 2);
         try {
-            BigInteger m = (BigInteger) oin.readObject();
-            BigInteger e = (BigInteger) oin.readObject();
-            RSAPublicKeySpec keySpec = new RSAPublicKeySpec(m, e);
-            KeyFactory fact = KeyFactory.getInstance("RSA");
-            PublicKey pubKey = fact.generatePublic(keySpec);
-            return pubKey;
-        } catch (Exception e) {
-            throw new RuntimeException("Spurious serialisation error", e);
-        } finally {
-            oin.close();
+            return KeyFactory.getInstance("RSA").generatePublic(new RSAPublicKeySpec(v[0], v[1]));
+        } catch (java.security.GeneralSecurityException e) {
+            throw new IOException("Invalid RSA key file", e);
         }
     }
 
     private static PrivateKey readPrivateKeyFromFile(String keyFileName) throws IOException {
-
-        ObjectInputStream oin =
-                new ObjectInputStream(new FileInputStream(keyFileName));
+        // Only BigInteger values are accepted; see KeyFiles.
+        BigInteger[] v = KeyFiles.read(java.nio.file.Paths.get(keyFileName), 2);
         try {
-            BigInteger m = (BigInteger) oin.readObject();
-            BigInteger e = (BigInteger) oin.readObject();
-            RSAPrivateKeySpec keySpec = new RSAPrivateKeySpec(m, e);
-            KeyFactory fact = KeyFactory.getInstance("RSA");
-            PrivateKey pubKey = fact.generatePrivate(keySpec);
-            return pubKey;
-        } catch (Exception e) {
-            throw new RuntimeException("Spurious serialisation error", e);
-        } finally {
-            oin.close();
+            return KeyFactory.getInstance("RSA").generatePrivate(new RSAPrivateKeySpec(v[0], v[1]));
+        } catch (java.security.GeneralSecurityException e) {
+            throw new IOException("Invalid RSA key file", e);
         }
-
-
     }
 
 }

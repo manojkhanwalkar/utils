@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.ObjectReader;
 import com.fasterxml.jackson.databind.ObjectWriter;
 
 import com.fasterxml.jackson.databind.jsonschema.JsonSchema;
-import com.fasterxml.jackson.databind.util.EmptyIterator;
 import com.sun.xml.internal.ws.util.QNameMap;
 import org.codehaus.jackson.JsonNode;
 import org.codehaus.jackson.annotate.JsonIgnore;
@@ -78,7 +77,7 @@ public class JSONTraverser {
     {
 
 
-        if (elements instanceof EmptyIterator) {
+        if (!elements.hasNext()) {
             //do nothing
         }
         else

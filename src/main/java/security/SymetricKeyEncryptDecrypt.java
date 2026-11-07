@@ -1,7 +1,5 @@
 package security;
 
-import sun.misc.BASE64Decoder;
-import sun.misc.BASE64Encoder;
 
 import javax.crypto.*;
 import java.io.IOException;
@@ -10,6 +8,9 @@ import java.security.InvalidKeyException;
 import java.security.Key;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
+import java.util.Arrays;
+import java.util.Base64;
+import javax.crypto.spec.GCMParameterSpec;
 
 
 
@@ -25,56 +26,70 @@ import java.security.SecureRandom;
 
 public class SymetricKeyEncryptDecrypt {
 
+    // AES-256 in GCM mode (authenticated encryption). DES/ECB was broken: 56-bit keys and
+    // ECB leaks plaintext patterns.
+    private static final String TRANSFORMATION = "AES/GCM/NoPadding";
+    private static final int GCM_IV_BYTES = 12;
+    private static final int GCM_TAG_BITS = 128;
+    private static final SecureRandom RANDOM = new SecureRandom();
+
     private Key key;
 
     /**
-     * Generates the encryption key. using "des" algorithm
+     * Generates a 256-bit AES encryption key.
      *
      * @throws java.security.NoSuchAlgorithmException
      */
     private void generateKey() throws NoSuchAlgorithmException {
         KeyGenerator generator;
-        generator = KeyGenerator.getInstance("DES");
-        generator.init(new SecureRandom());
+        generator = KeyGenerator.getInstance("AES");
+        generator.init(256, RANDOM);
         key = generator.generateKey();
     }
 
     private String encrypt(String message) throws IllegalBlockSizeException,
             BadPaddingException, NoSuchAlgorithmException,
             NoSuchPaddingException, InvalidKeyException,
-            UnsupportedEncodingException {
-        // Get a cipher object.
-        Cipher cipher = Cipher.getInstance("DES/ECB/PKCS5Padding");
-        cipher.init(Cipher.ENCRYPT_MODE, key);
+            UnsupportedEncodingException, java.security.InvalidAlgorithmParameterException {
+        // Fresh random IV for every message; never reuse an IV with the same GCM key.
+        byte[] iv = new byte[GCM_IV_BYTES];
+        RANDOM.nextBytes(iv);
+        Cipher cipher = Cipher.getInstance(TRANSFORMATION);
+        cipher.init(Cipher.ENCRYPT_MODE, key, new GCMParameterSpec(GCM_TAG_BITS, iv));
 
         // Gets the raw bytes to encrypt, UTF8 is needed for
         // having a standard character set
         byte[] stringBytes = message.getBytes("UTF8");
 
         // encrypt using the cypher
-        byte[] raw = cipher.doFinal(stringBytes);
+        byte[] ct = cipher.doFinal(stringBytes);
 
-        // converts to base64 for easier display.
-        BASE64Encoder encoder = new BASE64Encoder();
-        String base64 = encoder.encode(raw);
+        // IV || ciphertext+tag, base64 encoded for easier display.
+        byte[] raw = new byte[iv.length + ct.length];
+        System.arraycopy(iv, 0, raw, 0, iv.length);
+        System.arraycopy(ct, 0, raw, iv.length, ct.length);
+        String base64 = Base64.getEncoder().encodeToString(raw);
 
         return base64;
     }
 
     private String decrypt(String encrypted) throws InvalidKeyException,
             NoSuchAlgorithmException, NoSuchPaddingException,
-            IllegalBlockSizeException, BadPaddingException, IOException {
-
-        // Get a cipher object.
-        Cipher cipher = Cipher.getInstance("DES/ECB/PKCS5Padding");
-        cipher.init(Cipher.DECRYPT_MODE, key);
+            IllegalBlockSizeException, BadPaddingException, IOException,
+            java.security.InvalidAlgorithmParameterException {
 
         //decode the BASE64 coded message
-        BASE64Decoder decoder = new BASE64Decoder();
-        byte[] raw = decoder.decodeBuffer(encrypted);
+        byte[] raw = Base64.getDecoder().decode(encrypted);
+        if (raw.length < GCM_IV_BYTES) {
+            throw new IOException("Ciphertext too short");
+        }
 
-        //decode the message
-        byte[] stringBytes = cipher.doFinal(raw);
+        Cipher cipher = Cipher.getInstance(TRANSFORMATION);
+        cipher.init(Cipher.DECRYPT_MODE, key,
+                new GCMParameterSpec(GCM_TAG_BITS, Arrays.copyOfRange(raw, 0, GCM_IV_BYTES)));
+
+        //decrypt and verify the authentication tag (throws AEADBadTagException if tampered)
+        byte[] stringBytes = cipher.doFinal(raw, GCM_IV_BYTES, raw.length - GCM_IV_BYTES);
 
         //converts the decoded message to a String
         String clear = new String(stringBytes, "UTF8");
@@ -106,6 +121,8 @@ public class SymetricKeyEncryptDecrypt {
         } catch (BadPaddingException e) {
             e.printStackTrace();
         } catch (IOException e) {
+            e.printStackTrace();
+        } catch (java.security.InvalidAlgorithmParameterException e) {
             e.printStackTrace();
         }
     }

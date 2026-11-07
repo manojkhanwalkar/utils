@@ -3,7 +3,6 @@ package json.fieldcopy;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.jsonschema.JsonSchema;
-import com.fasterxml.jackson.databind.util.EmptyIterator;
 import com.fasterxml.jackson.xml.XmlMapper;
 import org.codehaus.jackson.annotate.JsonIgnoreProperties;
 

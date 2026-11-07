@@ -4,7 +4,7 @@ import simplepool.Wrapper;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
-import java.sql.Statement;
+import java.sql.PreparedStatement;
 
 public class DBWrapper implements Wrapper
 {
@@ -18,7 +18,9 @@ public class DBWrapper implements Wrapper
 
         try {
             Class.forName("com.mysql.jdbc.Driver");
-            connection = DriverManager.getConnection("jdbc:mysql://localhost:3306/test","root" , "admin");
+            // Credentials come from the environment instead of being hard-coded.
+            String url = System.getenv().getOrDefault("DB_URL", "jdbc:mysql://localhost:3306/test");
+            connection = DriverManager.getConnection(url, System.getenv("DB_USER"), System.getenv("DB_PASSWORD"));
         } catch (ClassNotFoundException e) {
             e.printStackTrace();
         } catch (SQLException e) {
@@ -32,15 +34,12 @@ public class DBWrapper implements Wrapper
     public synchronized void persist(long id, String request) {
 
         try {
-            Statement stmt = connection.createStatement();
-            String s = "Hello World from facade";
-            int i= 500;
-
-            String sql = "INSERT INTO Request VALUES (" + (int)id + ",'" +  request + "')";
-            //   String sql = "INSERT INTO Request VALUES (" + id +  ")";
-            stmt.executeUpdate(sql);
-
-            stmt.close();
+            // Parameterized statement: request text is bound, never concatenated into SQL.
+            try (PreparedStatement stmt = connection.prepareStatement("INSERT INTO Request VALUES (?, ?)")) {
+                stmt.setInt(1, (int) id);
+                stmt.setString(2, request);
+                stmt.executeUpdate();
+            }
         } catch (SQLException e) {
             e.printStackTrace();
         }
